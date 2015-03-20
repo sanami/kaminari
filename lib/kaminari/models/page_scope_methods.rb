@@ -2,13 +2,24 @@ module Kaminari
   module PageScopeMethods
     # Specify the <tt>per_page</tt> value for the preceding <tt>page</tt> scope
     #   Model.page(3).per(10)
-    def per(num)
+    def per(num, first_per_page = nil)
       if (n = num.to_i) <= 0
         self
       elsif max_per_page && max_per_page < n
         limit(max_per_page).offset(offset_value / limit_value * max_per_page)
       else
-        limit(n).offset(offset_value / limit_value * n)
+        if first_per_page
+          @_current_per_page = num
+          @_first_per_page = first_per_page
+
+          if current_page == 1
+            limit(first_per_page).offset(0)
+          else
+            limit(n).offset(offset_value / limit_value * n - (num - first_per_page))
+          end
+        else
+          limit(n).offset(offset_value / limit_value * n)
+        end
       end
     end
 
@@ -23,7 +34,11 @@ module Kaminari
       count_without_padding -= @_padding if defined?(@_padding) && @_padding
       count_without_padding = 0 if count_without_padding < 0
 
-      total_pages_count = (count_without_padding.to_f / limit_value).ceil
+      if defined?(@_first_per_page)
+        count_without_padding += (@_current_per_page - @_first_per_page)
+      end
+
+      total_pages_count = (count_without_padding.to_f / current_per_page).ceil
       if max_pages.present? && max_pages < total_pages_count
         max_pages
       else
@@ -37,9 +52,23 @@ module Kaminari
     def current_page
       offset_without_padding = offset_value
       offset_without_padding -= @_padding if defined?(@_padding) && @_padding
+
+      if defined?(@_first_per_page)
+        offset_without_padding += (@_current_per_page - @_first_per_page)
+      end
+
       offset_without_padding = 0 if offset_without_padding < 0
 
-      (offset_without_padding / limit_value) + 1
+      (offset_without_padding / current_per_page) + 1
+    end
+
+    # Main per page
+    def current_per_page
+      if defined?(@_current_per_page)
+        @_current_per_page
+      else
+        limit_value
+      end
     end
 
     # Next page number in the collection
